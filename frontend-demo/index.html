@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AccessIQ — Identity Risk Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: '#0b0f1a',
+            surface: '#111827',
+            card: '#1a2235',
+            border: '#1e2d45',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-ring {
+      0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+      70%  { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0b0f1a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+
+    .pulse-critical { animation: pulse-ring 2s infinite; border-radius: 50%; }
+    .spinner { animation: spin 0.9s linear infinite; }
+    .fade-in { animation: fadeUp 0.25s ease-out forwards; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 4px; }
+
+    .drop-zone { border: 2px dashed #1e2d45; transition: border-color 0.2s, background 0.2s; }
+    .drop-zone.drag-over { border-color: #3b82f6; background: rgba(59,130,246,0.04); }
+    .drop-zone.uploaded  { border-color: #22c55e; background: rgba(34,197,94,0.04); }
+
+    .nav-item { transition: background 0.12s, color 0.12s; }
+    .nav-item:hover { background: rgba(59,130,246,0.08); }
+    .nav-item.active { background: rgba(59,130,246,0.12); border-left: 2px solid #3b82f6; }
+    .nav-item:not(.active) { border-left: 2px solid transparent; }
+
+    .user-row { cursor: pointer; transition: background 0.1s; }
+    .user-row:hover { background: rgba(59,130,246,0.05); }
+
+    #modal-overlay { backdrop-filter: blur(4px); animation: fadeUp 0.15s ease-out; }
+
+    input:focus, select:focus { outline: 1px solid #3b82f6; }
+    button:disabled { cursor: not-allowed; }
+
+    /* Prevent layout shift when section hidden */
+    .section { display: none; }
+    .section.active { display: block; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+<header style="background:#111827; border-bottom:1px solid #1e2d45; position:sticky; top:0; z-index:30;">
+  <div class="flex items-center justify-between px-5 py-3">
+
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+           style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">
+        <svg width="15" height="15" fill="none" stroke="white" stroke-width="2.2" viewBox="0 0 24 24">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <div>
+        <span class="font-semibold text-white text-sm">AccessIQ</span>
+        <span class="ml-2 text-xs" style="color:#64748b;">Identity Risk Intelligence Platform</span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-5">
+      <div id="connection-status" class="flex items-center gap-2 text-xs">
+        <div class="w-2 h-2 rounded-full bg-yellow-400"></div>
+        <span style="color:#94a3b8;">Connecting…</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs" style="color:#64748b;">
+        <span>Backend:</span>
+        <input id="api-base" value="http://localhost:8000"
+               class="text-xs px-2 py-1 rounded font-mono"
+               style="background:#1a2235;border:1px solid #1e2d45;color:#94a3b8;width:185px;">
+      </div>
+    </div>
+
+  </div>
+</header>
+
+<!-- ── Layout ──────────────────────────────────────────────────────────── -->
+<div class="flex" style="height:calc(100vh - 49px);">
+
+  <!-- Sidebar -->
+  <aside style="width:196px;background:#111827;border-right:1px solid #1e2d45;flex-shrink:0;overflow-y:auto;">
+    <div class="px-3 pt-5 pb-2">
+      <p class="text-xs font-semibold uppercase tracking-wider px-3 mb-2" style="color:#475569;">Workflow</p>
+
+      <button onclick="showSection('upload')"
+              class="nav-item active w-full text-left px-3 py-2.5 rounded text-xs flex items-center gap-2.5 mb-0.5"
+              id="nav-upload">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </svg>
+        <span class="flex-1">Upload Data</span>
+        <span id="badge-upload" class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+      </button>
+
+      <button onclick="runAnalysis()"
+              class="nav-item w-full text-left px-3 py-2.5 rounded text-xs flex items-center gap-2.5 mb-0.5"
+              id="nav-analyze">
+        <svg id="analyze-nav-icon" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        <span id="analyze-nav-text">Run Analysis</span>
+        <span id="badge-analyze" class="hidden w-1.5 h-1.5 rounded-full bg-green-500"></span>
+      </button>
+    </div>
+
+    <div style="border-top:1px solid #1e2d45;" class="mx-3 my-2"></div>
+
+    <div class="px-3 pb-4">
+      <p class="text-xs font-semibold uppercase tracking-wider px-3 mb-2" style="color:#475569;">Results</p>
+
+      <button onclick="showSection('dashboard')"
+              class="nav-item w-full text-left px-3 py-2.5 rounded text-xs flex items-center gap-2.5 mb-0.5"
+              id="nav-dashboard">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        Dashboard
+      </button>
+
+      <button onclick="showSection('users')"
+              class="nav-item w-full text-left px-3 py-2.5 rounded text-xs flex items-center gap-2.5 mb-0.5"
+              id="nav-users">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        Users
+      </button>
+
+      <button onclick="showSection('compliance')"
+              class="nav-item w-full text-left px-3 py-2.5 rounded text-xs flex items-center gap-2.5 mb-0.5"
+              id="nav-compliance">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M9 11l3 3L22 4"/>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+        Compliance
+      </button>
+
+      <button onclick="showSection('metrics')"
+              class="nav-item w-full text-left px-3 py-2.5 rounded text-xs flex items-center gap-2.5 mb-0.5"
+              id="nav-metrics">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Hackathon Metrics
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 overflow-y-auto" style="background:#0b0f1a;">
+
+    <!-- ── Upload ───────────────────────────────────────────────────────── -->
+    <div id="section-upload" class="section active p-6">
+      <div class="mb-5">
+        <h1 class="text-lg font-semibold text-white mb-1">Upload Data</h1>
+        <p class="text-xs" style="color:#64748b;">Upload your identity users CSV and access events CSV to begin analysis.</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 mb-4">
+
+        <!-- Users CSV -->
+        <div class="rounded-xl p-6 drop-zone" style="background:#111827;" id="drop-users">
+          <div class="text-center">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3"
+                 style="background:rgba(59,130,246,0.1);">
+              <svg width="22" height="22" fill="none" stroke="#3b82f6" stroke-width="1.8" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
+            <p class="text-sm font-medium text-white mb-1">Identity Users</p>
+            <p class="text-xs mb-4" style="color:#64748b;">identity_users.csv</p>
+
+            <div id="users-file-info" class="hidden mb-3 text-xs py-1.5 px-3 rounded-lg text-green-400"
+                 style="background:rgba(34,197,94,0.08);">
+              <span id="users-filename">—</span>
+            </div>
+
+            <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium"
+                   style="background:rgba(59,130,246,0.12);color:#3b82f6;border:1px solid rgba(59,130,246,0.2);">
+              <input type="file" accept=".csv" class="hidden" id="users-file-input"
+                     onchange="handleFileSelect(this,'users')">
+              Choose File
+            </label>
+
+            <p class="text-xs mt-3" style="color:#475569;" id="users-status">No file selected</p>
+          </div>
+        </div>
+
+        <!-- Events CSV -->
+        <div class="rounded-xl p-6 drop-zone" style="background:#111827;" id="drop-events">
+          <div class="text-center">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3"
+                 style="background:rgba(168,85,247,0.1);">
+              <svg width="22" height="22" fill="none" stroke="#a855f7" stroke-width="1.8" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <p class="text-sm font-medium text-white mb-1">Access Events</p>
+            <p class="text-xs mb-4" style="color:#64748b;">identity_events.csv</p>
+
+            <div id="events-file-info" class="hidden mb-3 text-xs py-1.5 px-3 rounded-lg text-green-400"
+                 style="background:rgba(34,197,94,0.08);">
+              <span id="events-filename">—</span>
+            </div>
+
+            <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium"
+                   style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.2);">
+              <input type="file" accept=".csv" class="hidden" id="events-file-input"
+                     onchange="handleFileSelect(this,'events')">
+              Choose File
+            </label>
+
+            <p class="text-xs mt-3" style="color:#475569;" id="events-status">No file selected</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analyze card -->
+      <div class="rounded-xl p-5" style="background:#111827;border:1px solid #1e2d45;">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-white mb-0.5">Start Analysis</p>
+            <p class="text-xs" style="color:#64748b;">Uploads both files then runs the full risk detection pipeline.</p>
+          </div>
+          <button onclick="runAnalysis()" id="analyze-btn"
+                  class="px-5 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center gap-2"
+                  style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">
+            <svg id="analyze-icon" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            <span id="analyze-text">Run Analysis</span>
+          </button>
+        </div>
+
+        <div id="analyze-progress" class="hidden mt-4 pt-4" style="border-top:1px solid #1e2d45;">
+          <div class="flex items-center gap-2 text-xs" style="color:#94a3b8;">
+            <svg class="spinner flex-shrink-0" width="13" height="13" fill="none" stroke="#3b82f6" stroke-width="2" viewBox="0 0 24 24">
+              <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+              <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+              <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+              <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+            </svg>
+            <span id="progress-text">Initialising…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Dashboard ────────────────────────────────────────────────────── -->
+    <div id="section-dashboard" class="section p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h1 class="text-lg font-semibold text-white mb-1">Risk Dashboard</h1>
+          <p class="text-xs" style="color:#64748b;">Identity risk posture across all accounts.</p>
+        </div>
+        <button onclick="loadDashboard()" class="text-xs px-3 py-1.5 rounded flex items-center gap-1.5"
+                style="background:#1a2235;color:#94a3b8;border:1px solid #1e2d45;">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div id="dashboard-content">
+        <div class="flex flex-col items-center justify-center py-20 gap-2" style="color:#475569;">
+          <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24" style="opacity:.25;">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <p class="text-sm">Run analysis first</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Users ─────────────────────────────────────────────────────────── -->
+    <div id="section-users" class="section p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h1 class="text-lg font-semibold text-white mb-1">Users</h1>
+          <p class="text-xs" style="color:#64748b;">All identity accounts ranked by risk score. Click a row for full detail.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="user-search" type="text" placeholder="Search…"
+                 class="text-xs px-3 py-1.5 rounded"
+                 style="background:#1a2235;border:1px solid #1e2d45;color:#e2e8f0;width:170px;"
+                 oninput="filterUsers()">
+          <select id="risk-filter" onchange="filterUsers()"
+                  class="text-xs px-3 py-1.5 rounded"
+                  style="background:#1a2235;border:1px solid #1e2d45;color:#94a3b8;">
+            <option value="">All Levels</option>
+            <option>Critical</option><option>High</option>
+            <option>Medium</option><option>Low</option>
+          </select>
+          <button onclick="loadUsers()" class="text-xs px-3 py-1.5 rounded flex items-center gap-1.5"
+                  style="background:#1a2235;color:#94a3b8;border:1px solid #1e2d45;">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+      <div id="users-content">
+        <div class="flex flex-col items-center justify-center py-20 gap-2" style="color:#475569;">
+          <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24" style="opacity:.25;">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+          </svg>
+          <p class="text-sm">Run analysis first</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Compliance ────────────────────────────────────────────────────── -->
+    <div id="section-compliance" class="section p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h1 class="text-lg font-semibold text-white mb-1">Compliance</h1>
+          <p class="text-xs" style="color:#64748b;">Framework violations and control mappings.</p>
+        </div>
+        <button onclick="loadCompliance()" class="text-xs px-3 py-1.5 rounded flex items-center gap-1.5"
+                style="background:#1a2235;color:#94a3b8;border:1px solid #1e2d45;">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div id="compliance-content">
+        <div class="flex flex-col items-center justify-center py-20 gap-2" style="color:#475569;">
+          <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24" style="opacity:.25;">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          <p class="text-sm">Run analysis first</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Hackathon Metrics ──────────────────────────────────────────────── -->
+    <div id="section-metrics" class="section p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h1 class="text-lg font-semibold text-white mb-1">Hackathon Metrics</h1>
+          <p class="text-xs" style="color:#64748b;">Key risk indicators and scoring breakdown.</p>
+        </div>
+        <button onclick="loadMetrics()" class="text-xs px-3 py-1.5 rounded flex items-center gap-1.5"
+                style="background:#1a2235;color:#94a3b8;border:1px solid #1e2d45;">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div id="metrics-content">
+        <div class="flex flex-col items-center justify-center py-20 gap-2" style="color:#475569;">
+          <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24" style="opacity:.25;">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          <p class="text-sm">Run analysis first</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="fixed bottom-5 right-5 flex flex-col gap-2 z-50"></div>
+
+<!-- ── User Detail Modal ─────────────────────────────────────────────────── -->
+<div id="modal-overlay" class="hidden fixed inset-0 z-50 flex items-start justify-center pt-12"
+     style="background:rgba(0,0,0,0.75);">
+  <div class="w-full max-w-2xl mx-4 rounded-xl overflow-hidden"
+       style="background:#111827;border:1px solid #1e2d45;max-height:82vh;display:flex;flex-direction:column;">
+    <div class="flex items-center justify-between px-5 py-4 flex-shrink-0"
+         style="border-bottom:1px solid #1e2d45;">
+      <h2 class="text-sm font-semibold text-white" id="modal-title">User Detail</h2>
+      <button onclick="closeModal()"
+              class="w-7 h-7 rounded flex items-center justify-center text-base font-light"
+              style="background:#1a2235;color:#94a3b8;line-height:1;">×</button>
+    </div>
+    <div id="modal-body" class="overflow-y-auto p-5"></div>
+  </div>
+</div>
+
+<script>
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function apiBase() { return (document.getElementById('api-base').value || '').replace(/\/$/, ''); }
+
+function riskColor(level) {
+  return { Critical:'#ef4444', High:'#f97316', Medium:'#eab308', Low:'#22c55e' }[level] || '#64748b';
+}
+
+function riskBadge(level) {
+  const c = {
+    Critical: 'rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.25)',
+    High:     'rgba(249,115,22,0.1);color:#f97316;border:1px solid rgba(249,115,22,0.25)',
+    Medium:   'rgba(234,179,8,0.1);color:#eab308;border:1px solid rgba(234,179,8,0.25)',
+    Low:      'rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.25)',
+  }[level] || '1a2235;color:#94a3b8;border:1px solid #1e2d45';
+  return `<span class="text-xs font-medium px-2 py-0.5 rounded-full" style="background:${c};">${level || '—'}</span>`;
+}
+
+function scoreArc(score, level) {
+  score = Math.min(100, Math.max(0, score || 0));
+  const r = 27, c = 2 * Math.PI * r, offset = c - (score / 100) * c;
+  const col = riskColor(level);
+  return `<svg width="70" height="70" viewBox="0 0 70 70">
+    <circle cx="35" cy="35" r="${r}" fill="none" stroke="#1e2d45" stroke-width="4.5"/>
+    <circle cx="35" cy="35" r="${r}" fill="none" stroke="${col}" stroke-width="4.5"
+      stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"
+      stroke-linecap="round" transform="rotate(-90 35 35)"/>
+    <text x="35" y="39" text-anchor="middle" font-size="13" font-weight="600"
+      fill="${col}" font-family="JetBrains Mono,monospace">${score}</text>
+  </svg>`;
+}
+
+function spinnerSVG(color) {
+  color = color || '#3b82f6';
+  return `<svg class="spinner" width="14" height="14" fill="none" stroke="${color}" stroke-width="2" viewBox="0 0 24 24">
+    <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+    <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+    <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+    <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+  </svg>`;
+}
+
+function loadingHTML(msg) {
+  return `<div class="flex items-center gap-2 py-14 justify-center text-xs" style="color:#64748b;">
+    ${spinnerSVG()} <span>${msg || 'Loading…'}</span></div>`;
+}
+
+function errorHTML(msg) {
+  return `<div class="text-center py-14 text-xs" style="color:#ef4444;">${msg}</div>`;
+}
+
+function showToast(msg, type) {
+  type = type || 'info';
+  const col = {info:'#3b82f6', success:'#22c55e', error:'#ef4444', warn:'#eab308'}[type];
+  const el = document.createElement('div');
+  el.className = 'fade-in flex items-start gap-2 px-4 py-3 rounded-xl text-xs shadow-xl';
+  el.style.cssText = `background:#1a2235;border:1px solid ${col}44;max-width:300px;min-width:220px;`;
+  el.innerHTML = `<div class="w-1.5 h-1.5 rounded-full mt-0.5 flex-shrink-0" style="background:${col};"></div>
+    <span style="color:#cbd5e1;">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+// ─── State ─────────────────────────────────────────────────────────────────
+const state = { usersUploaded:false, eventsUploaded:false, analyzed:false, allUsers:[] };
+
+// ─── Navigation ────────────────────────────────────────────────────────────
+const SECTIONS = ['upload','dashboard','users','compliance','metrics'];
+
+function showSection(name) {
+  SECTIONS.forEach(s => {
+    document.getElementById(`section-${s}`).classList.remove('active');
+    const btn = document.getElementById(`nav-${s}`);
+    if (btn) btn.classList.remove('active');
+  });
+  document.getElementById(`section-${name}`).classList.add('active');
+  const btn = document.getElementById(`nav-${name}`);
+  if (btn) btn.classList.add('active');
+
+  if (state.analyzed) {
+    const dashOk = document.getElementById('dashboard-content').querySelector('.fade-in');
+    if (name === 'dashboard' && !dashOk) loadDashboard();
+    if (name === 'users')      loadUsers();
+    if (name === 'compliance') loadCompliance();
+    if (name === 'metrics')    loadMetrics();
+  }
+}
+
+// ─── Connection check ──────────────────────────────────────────────────────
+async function checkConnection() {
+  const el = document.getElementById('connection-status');
+  try {
+    const res = await fetch(`${apiBase()}/`, { signal: AbortSignal.timeout(3000) });
+    const d = await res.json();
+    el.innerHTML = `<div class="w-2 h-2 rounded-full bg-green-400"></div>
+      <span style="color:#94a3b8;">Connected · ${d.name || 'AccessIQ'} v${d.version || ''}</span>`;
+  } catch {
+    el.innerHTML = `<div class="w-2 h-2 rounded-full bg-red-400"></div>
+      <span style="color:#94a3b8;">Backend offline</span>`;
+  }
+}
+
+// ─── File upload ───────────────────────────────────────────────────────────
+async function handleFileSelect(input, type) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById(`${type}-status`);
+  const infoEl   = document.getElementById(`${type}-file-info`);
+  const nameEl   = document.getElementById(`${type}-filename`);
+  const dropEl   = document.getElementById(`drop-${type}`);
+
+  statusEl.textContent = 'Uploading…';
+  statusEl.style.color = '#3b82f6';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res = await fetch(`${apiBase()}/api/upload/${type}`, { method:'POST', body:fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+    nameEl.textContent = `✓ ${file.name} — ${data.rows_processed} rows`;
+    infoEl.classList.remove('hidden');
+    dropEl.classList.add('uploaded');
+    statusEl.textContent = `${data.rows_processed} records loaded`;
+    statusEl.style.color = '#22c55e';
+    state[`${type}Uploaded`] = true;
+    showToast(`${type === 'users' ? 'Users' : 'Events'} uploaded — ${data.rows_processed} rows`, 'success');
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+    statusEl.style.color = '#ef4444';
+    showToast(`Upload failed: ${err.message}`, 'error');
+  }
+}
+
+// ─── Analysis ──────────────────────────────────────────────────────────────
+async function runAnalysis() {
+  const btn       = document.getElementById('analyze-btn');
+  const text      = document.getElementById('analyze-text');
+  const icon      = document.getElementById('analyze-icon');
+  const progress  = document.getElementById('analyze-progress');
+  const progText  = document.getElementById('progress-text');
+  const navIcon   = document.getElementById('analyze-nav-icon');
+  const navText   = document.getElementById('analyze-nav-text');
+
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+  progress.classList.remove('hidden');
+  icon.outerHTML = `<svg id="analyze-icon" class="spinner" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+    <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+    <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+    <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+  </svg>`;
+  text.textContent = 'Analysing…';
+  navText.textContent = 'Running…';
+
+  const steps = [
+    'Parsing identity records…',
+    'Building identity graph…',
+    'Detecting stale accounts…',
+    'Scoring privilege abuse…',
+    'Mapping compliance violations…',
+    'Computing blast radius…',
+    'Finalising risk scores…',
+  ];
+  let si = 0;
+  const timer = setInterval(() => {
+    if (si < steps.length) progText.textContent = steps[si++];
+  }, 900);
+
+  try {
+    const res  = await fetch(`${apiBase()}/api/analysis/run`, { method:'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+    clearInterval(timer);
+    state.analyzed = true;
+    document.getElementById('badge-analyze').classList.remove('hidden');
+    text.textContent = 'Re-run Analysis';
+    navText.textContent = 'Run Analysis';
+    progress.classList.add('hidden');
+    btn.disabled = false;
+    btn.style.opacity = '1';
+
+    // restore icon
+    document.getElementById('analyze-btn').querySelector('svg')?.remove();
+    const newIcon = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    newIcon.id = 'analyze-icon';
+    newIcon.setAttribute('width','15'); newIcon.setAttribute('height','15');
+    newIcon.setAttribute('fill','none'); newIcon.setAttribute('stroke','currentColor');
+    newIcon.setAttribute('stroke-width','2'); newIcon.setAttribute('viewBox','0 0 24 24');
+    newIcon.innerHTML = '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>';
+    btn.prepend(newIcon);
+
+    showToast(`Analysis complete — ${data.users_processed || '?'} users processed`, 'success');
+    showSection('dashboard');
+    await loadDashboard();
+  } catch (err) {
+    clearInterval(timer);
+    progText.textContent = `Failed: ${err.message}`;
+    progText.style.color = '#ef4444';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    text.textContent = 'Run Analysis';
+    navText.textContent = 'Run Analysis';
+    showToast(`Analysis failed: ${err.message}`, 'error');
+  }
+}
+
+// ─── Dashboard ─────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  document.getElementById('dashboard-content').innerHTML = loadingHTML('Loading dashboard…');
+  try {
+    const res = await fetch(`${apiBase()}/api/dashboard/summary`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderDashboard(await res.json());
+  } catch (err) {
+    document.getElementById('dashboard-content').innerHTML = errorHTML(`Dashboard error: ${err.message}`);
+    showToast(err.message, 'error');
+  }
+}
+
+function renderDashboard(d) {
+  const cc = d.compliance_score >= 80 ? '#22c55e' : d.compliance_score >= 60 ? '#eab308' : '#ef4444';
+
+  document.getElementById('dashboard-content').innerHTML = `
+  <div class="fade-in">
+    <!-- Stat row -->
+    <div class="grid gap-3 mb-5" style="grid-template-columns:repeat(6,1fr);">
+      ${statCard('Users',     d.total_users,   '#3b82f6')}
+      ${statCard('Critical',  d.critical_count, '#ef4444')}
+      ${statCard('High',      d.high_count,     '#f97316')}
+      ${statCard('Medium',    d.medium_count,   '#eab308')}
+      ${statCard('Low',       d.low_count,      '#22c55e')}
+      <div class="rounded-xl p-4" style="background:#111827;border:1px solid #1e2d45;">
+        <p class="text-xs mb-2" style="color:#64748b;">Compliance</p>
+        <div class="text-2xl font-bold font-mono" style="color:${cc};">${d.compliance_score.toFixed(1)}<span class="text-sm font-normal" style="color:#64748b;">%</span></div>
+        <div class="mt-2 h-1 rounded" style="background:#1e2d45;">
+          <div class="h-1 rounded" style="width:${d.compliance_score}%;background:${cc};"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top risks table -->
+    <div class="rounded-xl overflow-hidden mb-4" style="border:1px solid #1e2d45;">
+      <div class="px-5 py-3.5" style="background:#111827;border-bottom:1px solid #1e2d45;">
+        <span class="text-sm font-semibold text-white">Top Risk Accounts</span>
+      </div>
+      <div style="background:#0b0f1a;">
+        ${(d.top_risks || []).map(u => `
+        <div class="flex items-center gap-4 px-5 py-4 user-row"
+             style="border-bottom:1px solid #1e2d45;"
+             onclick="showUserDetail('${u.id}')">
+          <div class="flex-shrink-0">${scoreArc(u.risk_score, u.risk_level)}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-medium text-white">${u.name}</span>
+              ${riskBadge(u.risk_level)}
+              ${u.risk_level === 'Critical'
+                ? '<span class="inline-block w-2 h-2 rounded-full bg-red-500 pulse-critical"></span>'
+                : ''}
+            </div>
+            <div class="text-xs" style="color:#64748b;">${u.role} · ${u.department} · ${u.account_type}</div>
+            ${u.primary_finding
+              ? `<div class="mt-1 text-xs inline-block px-2 py-0.5 rounded"
+                      style="background:rgba(239,68,68,0.07);color:#f87171;">${u.primary_finding}</div>`
+              : ''}
+          </div>
+          <div class="text-xs flex-shrink-0 px-2 py-1 rounded" style="background:#1a2235;color:#64748b;">View →</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Violation banner -->
+    <div class="rounded-xl p-4 flex items-center gap-3"
+         style="background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.15);">
+      <svg width="15" height="15" fill="none" stroke="#ef4444" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <span class="text-xs" style="color:#f87171;">
+        <strong>${d.total_violations}</strong> violations detected across
+        <strong>${d.total_users}</strong> identity accounts
+      </span>
+    </div>
+  </div>`;
+}
+
+function statCard(label, value, color) {
+  return `<div class="rounded-xl p-4" style="background:#111827;border:1px solid #1e2d45;">
+    <p class="text-xs mb-2" style="color:#64748b;">${label}</p>
+    <div class="text-2xl font-bold font-mono" style="color:${color};">${value}</div>
+  </div>`;
+}
+
+// ─── Users ─────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  document.getElementById('users-content').innerHTML = loadingHTML('Loading users…');
+  try {
+    const res = await fetch(`${apiBase()}/api/users/`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    state.allUsers = Array.isArray(data) ? data : (data.users || []);
+    renderUsersTable(state.allUsers);
+  } catch (err) {
+    document.getElementById('users-content').innerHTML = errorHTML(`Users error: ${err.message}`);
+    showToast(err.message, 'error');
+  }
+}
+
+function renderUsersTable(users) {
+  if (!users.length) {
+    document.getElementById('users-content').innerHTML = `<div class="text-center py-14 text-xs" style="color:#475569;">No users matched.</div>`;
+    return;
+  }
+
+  document.getElementById('users-content').innerHTML = `
+  <div class="fade-in rounded-xl overflow-hidden" style="border:1px solid #1e2d45;">
+    <table class="w-full text-xs">
+      <thead>
+        <tr style="background:#111827;border-bottom:1px solid #1e2d45;">
+          <th class="text-left px-4 py-3 font-semibold" style="color:#475569;">NAME</th>
+          <th class="text-left px-4 py-3 font-semibold" style="color:#475569;">DEPARTMENT</th>
+          <th class="text-left px-4 py-3 font-semibold" style="color:#475569;">ROLE</th>
+          <th class="text-left px-4 py-3 font-semibold" style="color:#475569;">TYPE</th>
+          <th class="text-left px-4 py-3 font-semibold" style="color:#475569;">RISK</th>
+          <th class="text-right px-4 py-3 font-semibold" style="color:#475569;">SCORE</th>
+        </tr>
+      </thead>
+      <tbody style="background:#0b0f1a;">
+        ${users.map(u => `
+        <tr class="user-row" style="border-bottom:1px solid #1e2d45;" onclick="showUserDetail('${u.id}')">
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-2">
+              ${u.risk_level === 'Critical'
+                ? '<span class="inline-block w-1.5 h-1.5 rounded-full bg-red-500 pulse-critical flex-shrink-0"></span>'
+                : '<span class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:#1e2d45;"></span>'}
+              <span class="font-medium text-white">${u.name}</span>
+              <span class="font-mono" style="color:#475569;">${u.id}</span>
+            </div>
+          </td>
+          <td class="px-4 py-3" style="color:#94a3b8;">${u.department}</td>
+          <td class="px-4 py-3" style="color:#94a3b8;">${u.role}</td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded font-mono" style="background:#1a2235;color:#64748b;">${u.account_type}</span>
+          </td>
+          <td class="px-4 py-3">${riskBadge(u.risk_level)}</td>
+          <td class="px-4 py-3 text-right font-mono font-semibold" style="color:${riskColor(u.risk_level)};">${u.risk_score}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="px-4 py-2.5 text-xs" style="background:#111827;border-top:1px solid #1e2d45;color:#475569;">
+      ${users.length} user${users.length !== 1 ? 's' : ''}
+    </div>
+  </div>`;
+}
+
+function filterUsers() {
+  const q     = (document.getElementById('user-search').value || '').toLowerCase();
+  const level = document.getElementById('risk-filter').value;
+  const out   = state.allUsers.filter(u =>
+    [u.name, u.department, u.role, u.id].some(f => (f || '').toLowerCase().includes(q)) &&
+    (!level || u.risk_level === level)
+  );
+  renderUsersTable(out);
+}
+
+// ─── User Detail Modal ─────────────────────────────────────────────────────
+async function showUserDetail(userId) {
+  document.getElementById('modal-title').textContent = 'Loading…';
+  document.getElementById('modal-body').innerHTML = loadingHTML('Fetching user detail…');
+  document.getElementById('modal-overlay').classList.remove('hidden');
+
+  try {
+    const res = await fetch(`${apiBase()}/api/users/${userId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderUserModal(await res.json());
+  } catch (err) {
+    document.getElementById('modal-body').innerHTML = errorHTML(`Error: ${err.message}`);
+  }
+}
+
+function renderUserModal(u) {
+  document.getElementById('modal-title').textContent = u.name;
+
+  const breakdownRows = u.score_breakdown
+    ? Object.entries(u.score_breakdown).map(([k, v]) => {
+        const pct = Math.min(100, Math.max(0, Math.abs(Number(v))));
+        return `<div class="mb-2">
+          <div class="flex justify-between text-xs mb-1">
+            <span style="color:#94a3b8;">${k.replace(/_/g,' ')}</span>
+            <span style="color:#e2e8f0;">${Number(v).toFixed(1)}</span>
+          </div>
+          <div class="h-1 rounded" style="background:#1a2235;">
+            <div class="h-1 rounded" style="width:${pct}%;background:#3b82f6;"></div>
+          </div>
+        </div>`;
+      }).join('')
+    : '';
+
+  document.getElementById('modal-body').innerHTML = `
+  <div class="fade-in">
+    <!-- Header -->
+    <div class="flex items-start gap-4 mb-5">
+      <div class="flex-shrink-0">${scoreArc(u.risk_score, u.risk_level)}</div>
+      <div class="flex-1">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          ${riskBadge(u.risk_level)}
+          <span class="text-xs font-mono px-2 py-0.5 rounded" style="background:#1a2235;color:#64748b;">${u.id}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs" style="color:#94a3b8;">
+          <span><strong style="color:#64748b;">Dept:</strong> ${u.department}</span>
+          <span><strong style="color:#64748b;">Role:</strong> ${u.role}</span>
+          <span><strong style="color:#64748b;">Type:</strong> ${u.account_type}</span>
+          <span><strong style="color:#64748b;">Joined:</strong> ${u.joined_date || '—'}</span>
+          <span><strong style="color:#64748b;">Last login:</strong> ${u.last_login || '—'}</span>
+          ${u.owner ? `<span><strong style="color:#64748b;">Owner:</strong> ${u.owner}</span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- Narrative -->
+    ${u.narrative ? `
+    <div class="rounded-lg p-4 mb-4"
+         style="background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.12);">
+      <p class="text-xs font-semibold mb-1" style="color:#3b82f6;">RISK NARRATIVE</p>
+      <p class="text-xs leading-relaxed" style="color:#94a3b8;">${u.narrative}</p>
+    </div>` : ''}
+
+    <!-- Score breakdown -->
+    ${breakdownRows ? `
+    <div class="rounded-lg p-4 mb-4" style="background:#1a2235;border:1px solid #1e2d45;">
+      <p class="text-xs font-semibold mb-3" style="color:#64748b;">SCORE BREAKDOWN</p>
+      ${breakdownRows}
+    </div>` : ''}
+
+    <!-- Findings -->
+    ${u.findings?.length ? `
+    <div class="mb-4">
+      <p class="text-xs font-semibold mb-2" style="color:#64748b;">FINDINGS (${u.findings.length})</p>
+      ${u.findings.map(f => `
+      <div class="rounded-lg p-3 mb-2 flex items-start gap-3"
+           style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.12);">
+        <div class="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style="background:#ef4444;"></div>
+        <div class="flex-1">
+          <div class="text-xs font-semibold text-white mb-0.5">${f.type}</div>
+          <div class="text-xs" style="color:#94a3b8;">${f.description}</div>
+          <div class="text-xs mt-1" style="color:#64748b;">+${f.points} pts · ${((f.confidence||1)*100).toFixed(0)}% confidence</div>
+        </div>
+      </div>`).join('')}
+    </div>` : ''}
+
+    <!-- Blast radius + Baseline side by side -->
+    ${(u.blast_radius_score || u.baseline_score) ? `
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      ${u.blast_radius_score ? `
+      <div class="rounded-lg p-3" style="background:#1a2235;border:1px solid #1e2d45;">
+        <p class="text-xs font-semibold mb-1" style="color:#64748b;">BLAST RADIUS</p>
+        <div class="text-2xl font-bold font-mono" style="color:#f97316;">${u.blast_radius_score}</div>
+        <p class="text-xs mt-1" style="color:#64748b;">${u.blast_radius_summary || '—'}</p>
+      </div>` : ''}
+      ${u.baseline_score ? `
+      <div class="rounded-lg p-3" style="background:#1a2235;border:1px solid #1e2d45;">
+        <p class="text-xs font-semibold mb-1" style="color:#64748b;">BASELINE DEVIATION</p>
+        <div class="text-2xl font-bold font-mono" style="color:#a855f7;">${u.baseline_score}</div>
+        <p class="text-xs mt-1" style="color:#64748b;">${u.baseline_deviation || '—'}</p>
+      </div>` : ''}
+    </div>` : ''}
+
+    <!-- Recommendations -->
+    ${u.recommendations?.length ? `
+    <div class="mb-4">
+      <p class="text-xs font-semibold mb-2" style="color:#64748b;">RECOMMENDATIONS</p>
+      ${u.recommendations.map(r => `
+      <div class="flex items-start gap-2 text-xs mb-1.5" style="color:#94a3b8;">
+        <span style="color:#22c55e;flex-shrink:0;">→</span>${r}
+      </div>`).join('')}
+    </div>` : ''}
+
+    <!-- Systems access -->
+    ${u.systems?.length ? `
+    <div>
+      <p class="text-xs font-semibold mb-2" style="color:#64748b;">SYSTEMS ACCESS</p>
+      <div class="flex flex-wrap gap-1.5">
+        ${u.systems.map(s => `<span class="text-xs px-2 py-0.5 rounded font-mono"
+          style="background:#1a2235;color:#64748b;border:1px solid #1e2d45;">${s}</span>`).join('')}
+      </div>
+    </div>` : ''}
+  </div>`;
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+// ─── Compliance ─────────────────────────────────────────────────────────────
+async function loadCompliance() {
+  document.getElementById('compliance-content').innerHTML = loadingHTML('Loading compliance…');
+  try {
+    const res = await fetch(`${apiBase()}/api/compliance/report`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderCompliance(await res.json());
+  } catch (err) {
+    document.getElementById('compliance-content').innerHTML = errorHTML(`Compliance error: ${err.message}`);
+    showToast(err.message, 'error');
+  }
+}
+
+function renderCompliance(d) {
+  const score  = d.compliance_score || 0;
+  const col    = score >= 80 ? '#22c55e' : score >= 60 ? '#eab308' : '#ef4444';
+  const fwKeys = Object.keys(d.framework_mappings || {});
+
+  document.getElementById('compliance-content').innerHTML = `
+  <div class="fade-in">
+    <!-- Score card -->
+    <div class="rounded-xl p-5 mb-5 flex items-center gap-6" style="background:#111827;border:1px solid #1e2d45;">
+      <div>
+        <p class="text-xs mb-1" style="color:#64748b;">COMPLIANCE SCORE</p>
+        <div class="text-4xl font-bold font-mono" style="color:${col};">
+          ${score.toFixed(1)}<span class="text-xl font-normal" style="color:#64748b;">%</span>
+        </div>
+      </div>
+      <div class="flex-1">
+        <div class="h-2 rounded" style="background:#1e2d45;">
+          <div class="h-2 rounded" style="width:${score}%;background:${col};transition:width 0.6s;"></div>
+        </div>
+        <div class="flex justify-between text-xs mt-1" style="color:#475569;"><span>0</span><span>50</span><span>100</span></div>
+      </div>
+      <div class="text-right">
+        <p class="text-xs" style="color:#64748b;">Violations</p>
+        <p class="text-2xl font-bold font-mono" style="color:#ef4444;">${(d.violations || []).length}</p>
+      </div>
+    </div>
+
+    <!-- Framework breakdown -->
+    ${fwKeys.length ? `
+    <div class="grid grid-cols-3 gap-3 mb-5">
+      ${fwKeys.map(fw => {
+        const items = d.framework_mappings[fw] || [];
+        return `<div class="rounded-xl p-4" style="background:#111827;border:1px solid #1e2d45;">
+          <p class="text-xs font-semibold text-white mb-1">${fw}</p>
+          <div class="text-2xl font-bold font-mono" style="color:#3b82f6;">${items.length}</div>
+          <p class="text-xs" style="color:#64748b;">control violations</p>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+
+    <!-- Violations list -->
+    ${(d.violations || []).length ? `
+    <div class="rounded-xl overflow-hidden" style="border:1px solid #1e2d45;">
+      <div class="px-4 py-3" style="background:#111827;border-bottom:1px solid #1e2d45;">
+        <span class="text-sm font-semibold text-white">Violations (${d.violations.length})</span>
+      </div>
+      <div style="background:#0b0f1a;">
+        ${d.violations.slice(0,30).map(v => `
+        <div class="flex items-start gap-3 px-4 py-3" style="border-bottom:1px solid #1e2d45;">
+          <div class="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style="background:${riskColor(v.severity||'High')};"></div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-semibold text-white mb-0.5">${v.control || v.type || 'Violation'}</div>
+            <div class="text-xs" style="color:#94a3b8;">${v.description || v.standard || ''}</div>
+            ${v.recommendation ? `<div class="text-xs mt-1" style="color:#64748b;">→ ${v.recommendation}</div>` : ''}
+          </div>
+          <div class="flex-shrink-0 ml-2">${riskBadge(v.severity||'Medium')}</div>
+        </div>`).join('')}
+      </div>
+      ${d.violations.length > 30 ? `
+      <div class="px-4 py-3 text-xs text-center" style="background:#111827;color:#475569;">
+        Showing 30 of ${d.violations.length} violations
+      </div>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+// ─── Hackathon Metrics ──────────────────────────────────────────────────────
+async function loadMetrics() {
+  document.getElementById('metrics-content').innerHTML = loadingHTML('Loading metrics…');
+
+  // Try several likely endpoint paths
+  const paths = [
+    '/api/hackathon-scoring/metrics',
+    '/api/hackathon_scoring/metrics',
+    '/api/hackathon/metrics',
+    '/api/scoring/metrics',
+    '/api/metrics',
+  ];
+
+  let data = null;
+  for (const p of paths) {
+    try {
+      const res = await fetch(`${apiBase()}${p}`);
+      if (res.ok) { data = await res.json(); break; }
+    } catch { /* try next */ }
+  }
+
+  if (!data) {
+    document.getElementById('metrics-content').innerHTML =
+      errorHTML(`Could not reach hackathon metrics.<br>Tried: ${paths.join(', ')}`);
+    return;
+  }
+  renderMetrics(data);
+}
+
+function renderMetrics(d) {
+  const cs = d.compliance_score || {};
+
+  document.getElementById('metrics-content').innerHTML = `
+  <div class="fade-in space-y-5">
+
+    <!-- KRIs -->
+    ${d.key_risk_indicators?.length ? `
+    <div>
+      <p class="text-xs font-semibold mb-3" style="color:#64748b;">KEY RISK INDICATORS</p>
+      <div class="grid grid-cols-3 gap-3">
+        ${d.key_risk_indicators.slice(0,6).map(k => {
+          const label = k.name || k.indicator || Object.keys(k)[0] || '—';
+          const val   = k.value ?? k.score ?? '—';
+          return `<div class="rounded-xl p-4" style="background:#111827;border:1px solid #1e2d45;">
+            <p class="text-xs mb-1" style="color:#64748b;">${label}</p>
+            <div class="text-2xl font-bold font-mono" style="color:#3b82f6;">${val}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Top risky users -->
+    ${d.top_risky_users?.length ? `
+    <div class="rounded-xl overflow-hidden" style="border:1px solid #1e2d45;">
+      <div class="px-4 py-3" style="background:#111827;border-bottom:1px solid #1e2d45;">
+        <span class="text-sm font-semibold text-white">Top Risky Users</span>
+      </div>
+      <div style="background:#0b0f1a;">
+        ${d.top_risky_users.slice(0,8).map((u, i) => `
+        <div class="flex items-center gap-3 px-4 py-3" style="border-bottom:1px solid #1e2d45;">
+          <span class="w-5 text-center text-xs font-mono" style="color:#475569;">${i+1}</span>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-medium text-white">${u.name || u.user_name || '—'}</div>
+            <div class="text-xs" style="color:#64748b;">${u.department || ''}</div>
+          </div>
+          ${riskBadge(u.risk_level)}
+          <div class="font-mono text-sm font-semibold" style="color:${riskColor(u.risk_level)};">${u.risk_score ?? '—'}</div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Dept ranking -->
+    ${d.department_risk_ranking?.length ? `
+    <div class="rounded-xl overflow-hidden" style="border:1px solid #1e2d45;">
+      <div class="px-4 py-3" style="background:#111827;border-bottom:1px solid #1e2d45;">
+        <span class="text-sm font-semibold text-white">Department Risk Ranking</span>
+      </div>
+      <div style="background:#0b0f1a;">
+        ${d.department_risk_ranking.map((dept, i) => {
+          const score = dept.avg_risk_score || dept.risk_score || 0;
+          const col   = riskColor(dept.risk_level || 'Medium');
+          return `<div class="px-4 py-3" style="border-bottom:1px solid #1e2d45;">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs text-white">${dept.department || dept.name || `Dept ${i+1}`}</span>
+              <span class="text-xs font-mono font-semibold" style="color:${col};">${typeof score === 'number' ? score.toFixed(1) : score}</span>
+            </div>
+            <div class="h-1 rounded" style="background:#1e2d45;">
+              <div class="h-1 rounded" style="width:${Math.min(100, score)}%;background:${col};"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Compliance score object -->
+    ${Object.keys(cs).length ? `
+    <div class="rounded-xl p-5" style="background:#111827;border:1px solid #1e2d45;">
+      <p class="text-xs font-semibold mb-3" style="color:#64748b;">COMPLIANCE SCORE DETAIL</p>
+      <div class="grid grid-cols-3 gap-4">
+        ${Object.entries(cs).map(([k, v]) => `
+        <div>
+          <p class="text-xs mb-1" style="color:#64748b;">${k.replace(/_/g,' ')}</p>
+          <div class="text-xl font-bold font-mono" style="color:#3b82f6;">
+            ${typeof v === 'number' ? v.toFixed(1) : v}
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Top violated controls -->
+    ${d.top_violated_controls?.length ? `
+    <div class="rounded-xl overflow-hidden" style="border:1px solid #1e2d45;">
+      <div class="px-4 py-3" style="background:#111827;border-bottom:1px solid #1e2d45;">
+        <span class="text-sm font-semibold text-white">Top Violated Controls</span>
+      </div>
+      <div style="background:#0b0f1a;">
+        ${d.top_violated_controls.slice(0,10).map(c => `
+        <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid #1e2d45;">
+          <div>
+            <div class="text-xs font-medium text-white">${c.control || c.name || '—'}</div>
+            <div class="text-xs" style="color:#64748b;">${c.framework || c.standard || ''}</div>
+          </div>
+          <span class="text-xs font-mono font-semibold" style="color:#ef4444;">${c.count || c.violations || 0} violations</span>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Privilege concentration -->
+    ${d.privilege_concentration_index && Object.keys(d.privilege_concentration_index).length ? `
+    <div class="rounded-xl p-5" style="background:#111827;border:1px solid #1e2d45;">
+      <p class="text-xs font-semibold mb-3" style="color:#64748b;">PRIVILEGE CONCENTRATION</p>
+      <div class="grid grid-cols-3 gap-4">
+        ${Object.entries(d.privilege_concentration_index).map(([k,v]) => `
+        <div>
+          <p class="text-xs mb-1" style="color:#64748b;">${k.replace(/_/g,' ')}</p>
+          <div class="text-xl font-bold font-mono" style="color:#f97316;">
+            ${typeof v === 'number' ? v.toFixed(1) : v}
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+  </div>`;
+}
+
+// ─── Modal close on overlay click ─────────────────────────────────────────
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// ─── API base change ────────────────────────────────────────────────────────
+document.getElementById('api-base').addEventListener('change', checkConnection);
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+checkConnection();
+setInterval(checkConnection, 20000);
+</script>
+</html>

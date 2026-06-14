@@ -1,0 +1,11 @@
+id,user_id,event_type,timestamp,system,resource,action,result
+EVT-001,USR-001,login,2024-11-01 09:00:00,AWS,EC2,start_instance,success
+EVT-002,USR-001,access,2024-11-01 10:30:00,HRDB,employee_records,read,success
+EVT-003,USR-002,backup,2024-11-15 02:00:00,AWS,S3,write,success
+EVT-004,USR-003,login,2024-11-20 08:00:00,ERP,finance_module,access,success
+EVT-005,USR-003,export,2024-11-20 08:30:00,FinanceDB,transactions,export,success
+EVT-006,USR-004,login,2024-11-18 07:00:00,AWS,admin_console,access,success
+EVT-007,USR-005,login,2024-11-10 09:00:00,GitHub,repo,clone,success
+EVT-008,USR-006,login,2024-08-15 08:00:00,Payroll,salary_data,read,success
+EVT-009,USR-001,failed_login,2024-11-16 23:00:00,VPN,remote_access,denied,failed
+EVT-010,USR-003,privilege_change,2024-11-19 14:00:00,HRDB,permissions,granted,success
