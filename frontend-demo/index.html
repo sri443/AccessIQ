@@ -932,7 +932,7 @@ function closeModal() {
 async function loadCompliance() {
   document.getElementById('compliance-content').innerHTML = loadingHTML('Loading compliance…');
   try {
-    const res = await fetch(`${apiBase()}/api/compliance/report`);
+    const res = await fetch(`${apiBase()}/api/compliance/`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     renderCompliance(await res.json());
   } catch (err) {
@@ -1012,13 +1012,7 @@ async function loadMetrics() {
   document.getElementById('metrics-content').innerHTML = loadingHTML('Loading metrics…');
 
   // Try several likely endpoint paths
-  const paths = [
-    '/api/hackathon-scoring/metrics',
-    '/api/hackathon_scoring/metrics',
-    '/api/hackathon/metrics',
-    '/api/scoring/metrics',
-    '/api/metrics',
-  ];
+  const paths = ['/api/hackathon-metrics'];
 
   let data = null;
   for (const p of paths) {
